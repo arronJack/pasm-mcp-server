@@ -2,7 +2,7 @@
 
 PASM 的核心资产是**长期记忆、连续情绪、被反馈塑形的行为倾向** ——
 这些恰好是大模型原生缺失的。本包不提供"又一个聊天模型"，
-而是做一个**认知器官**：任何支持 MCP 的客户端（BaiLongma、Claude Desktop、
+而是做一个**认知器官**：任何支持 MCP 的客户端（桌面 AI 客户端、IDE 插件、自建 Agent、
 Cursor、自研 Agent）都能把它挂上去，让自己的模型获得跨会话的认知连续性。
 
 三分钟上手
@@ -21,6 +21,6 @@ Cursor、自研 Agent）都能把它挂上去，让自己的模型获得跨会�
 """
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = ["__version__"]

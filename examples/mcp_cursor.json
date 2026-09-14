@@ -1,0 +1,13 @@
+{
+  "_comment": "Cursor 接入配置。写到项目根目录 .cursor/mcp.json（项目级）或 ~/.cursor/mcp.json（全局）。",
+  "_docs": "https://docs.cursor.com/context/mcp",
+  "mcpServers": {
+    "pasm": {
+      "command": "python",
+      "args": ["-m", "pasm_mcp_server"],
+      "env": {
+        "PASM_MCP_PERSIST_DIR": ""
+      }
+    }
+  }
+}

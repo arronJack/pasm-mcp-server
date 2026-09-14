@@ -2,12 +2,42 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.0] — 2026-09-15
+
+**通用化 + 认知能力接入**：从"能挂进某一个客户端"升级为"任何 MCP 客户端都能挂"，
+并把基座 0.5.0 的认知能力层接进来。
+
+### 新增
+
+- **3 个新工具**（共 13 个）
+  - `pasm_semantic` 语义检索 + 可解释打分（融合分 / 语义分 / 记忆保留度 / 被唤起次数），
+    并回显查询被扩展成了哪些同义说法
+  - `pasm_focus` 焦点栈：压入/查看"现在在聊什么"，给后续检索加权
+  - `pasm_consolidate` 记忆巩固（睡眠回放），默认只出建议，`apply=true` 才执行
+- **认知能力自动接入**：依赖 `pasm-skills>=0.5.0` 时，`pasm_recall` / `pasm_context` /
+  `pasm_observe` 自动走认知中枢（语义检索 + 遗忘加权 + 焦点 + 同步索引），
+  并在 `pasm_status` 里如实报告当前向量后端。**装不上也不报错**，退回字面匹配
+- **主流客户端配置示例**：Cursor / Claude Desktop / VS Code(Copilot) / 通用 stdio
+- `MANIFEST.in`，`dist` 打包就绪（`python -m build`）
+
+### 变更
+
+- `pasm_status` 增加 `cognition` 段：向量后端名、索引条数、焦点、归档、记忆强度分布
+- `pasm_context` 增加 `cognition`（当前检索模式）与 `focus`（焦点提示词）字段
+- 依赖提升到 `pasm-skills>=0.5.0`；新增可选依赖组 `embed`（本地语义向量）
+- 文档与示例去掉对特定产品的依赖，改为通用接入说明
+
+### 验证
+
+- `pasm-mcp-server --selftest`：通过
+- `python examples/stdio_client_demo.py`：端到端通过
+
 ## [0.1.0] — 2026-09-15
 
 首个版本：**把 PASM 认知内核以 MCP 标准协议暴露出去**。
 
-这是 PASM 生态「路线 A」的落地 —— 不改任何外部产品一行代码，
-就能让支持 MCP 的 Agent（BaiLongma / Claude Desktop / Cursor / 自研）用上
+这是 PASM 生态「分发层」的落地 —— 不改任何外部产品一行代码，
+就能让支持 MCP 的 Agent（桌面 AI 客户端 / IDE 插件 / 自研）用上
 PASM 的长期记忆、情绪状态与行为倾向。
 
 ### 新增
@@ -32,8 +62,8 @@ PASM 的长期记忆、情绪状态与行为倾向。
 - **工具与示例**
   - `pasm-mcp-server --selftest` 本地自检（10 项）
   - `examples/stdio_client_demo.py` 模拟客户端的端到端冒烟测试
-  - `examples/bailongma_mcp_servers.json` BaiLongma 接入配置
-  - `examples/generic_mcp_client.json` 通用客户端配置
+  - `examples/mcp_generic.json` 通用 stdio 客户端配置
+  - `examples/mcp_cursor.json` / `mcp_claude_desktop.json` / `mcp_vscode.json`
 
 ### 设计决定
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """stdio 端到端冒烟测试 —— 模拟一个真实的 MCP 客户端。
 
-它做的事和 BaiLongma / Claude Desktop 完全一样：
+它做的事和真实的 MCP 客户端完全一样：
 1. 以子进程方式拉起 server（stdio 传输）
 2. 发 `initialize` 握手
 3. 发 `notifications/initialized`
@@ -114,7 +114,7 @@ def main() -> int:
         tools = r["result"]["tools"]
         names = [t["name"] for t in tools]
         print("\n=== tools/list ===\n%s" % ", ".join(names))
-        check(len(names) == 10, "暴露 10 个 PASM 工具")
+        check(len(names) == 13, "暴露 %d 个 PASM 工具" % len(names))
 
         # 4. 写记忆
         c.send("tools/call", {"name": "pasm_observe", "arguments": {

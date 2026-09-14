@@ -1,0 +1,38 @@
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # PyPI Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装构建工具
+        run: python -m pip install --upgrade pip build twine
+
+      - name: 构建
+        run: python -m build
+
+      - name: 检查
+        run: twine check dist/*
+
+      - name: 自检（先跑通再发布）
+        run: |
+          pip install dist/*.whl
+          pasm-mcp-server --selftest
+
+      - name: 发布到 PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # 需要 API token 时改用：
+        #   password: ${{ secrets.PYPI_API_TOKEN }}

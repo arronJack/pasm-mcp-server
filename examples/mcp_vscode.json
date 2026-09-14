@@ -1,0 +1,14 @@
+{
+  "_comment": "VS Code（Copilot Agent 模式）接入配置。写到项目根目录 .vscode/mcp.json。注意字段名是 servers（不是 mcpServers），且需要显式 type。",
+  "_docs": "https://code.visualstudio.com/docs/copilot/chat/mcp-servers",
+  "servers": {
+    "pasm": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "pasm_mcp_server"],
+      "env": {
+        "PASM_MCP_PERSIST_DIR": ""
+      }
+    }
+  }
+}

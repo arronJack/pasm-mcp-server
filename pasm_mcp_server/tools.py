@@ -10,27 +10,61 @@ PASM 提供客户端大模型没有的东西 —— 跨会话的长期记忆、�
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List
+import os
+import sys
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .bridge import CognitiveBridge
 
-# ============================================================ 工具实现
+# 本地开发逃生口（与 bridge 同款）：PASM_SKILLS_PATH 指向 pasm-skills 仓库根目录
+if os.environ.get("PASM_SKILLS_PATH"):
+    sys.path.insert(0, os.environ["PASM_SKILLS_PATH"])
+
+# 认知能力层（pasm-skills >= 0.5.0）。装了就自动用上语义检索 / 遗忘 / 巩固 / 焦点；
+# 没有也能跑 —— 退回基座的原生 recall，只是没有语义增强。
+try:
+    from pasm_skills.cognition import enhance as _enhance  # type: ignore
+except Exception:  # pragma: no cover
+    _enhance = None  # type: ignore
 
 
 def _agent_id(args: Dict[str, Any]) -> str:
     return str(args.get("agent_id") or "default")
 
 
+def _cog(bridge: CognitiveBridge, agent_id: str) -> Tuple[Any, Optional[Any]]:
+    """取 (智能体, 认知中枢)。中枢拿不到就返回 None —— 功能降级但不报错。"""
+    ag = bridge.get(agent_id)
+    if _enhance is None:
+        return ag, None
+    hub = getattr(ag, "cognition", None)
+    if hub is None:
+        try:
+            hub = _enhance(ag)
+        except Exception:
+            return ag, None
+    return ag, hub
+
+
 def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
     """取认知上下文（只读，不写记忆）。这是**注入提示词**用的一号工具。"""
-    ag = bridge.get(_agent_id(args))
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
     query = str(args.get("query") or "")
     k = int(args.get("k") or 5)
-    facts = ag.recall(query, k=k) if query else []
+    if cog is not None and query:
+        facts = cog.recall(query, k=k)
+    else:
+        facts = ag.recall(query, k=k) if query else []
     return {
         "agent_id": ag.agent_id,
         "tier": ag.tier,
         "query": query,
+        "cognition": (
+            "semantic" if cog is not None else
+            ("lexical（未装 pasm-skills>=0.5.0 的认知层，检索为字面匹配）")
+        ),
+        "focus": (cog.focus.to_prompt() if cog is not None else ""),
         "recalled": [
             {
                 "title": f.get("title", ""),
@@ -54,16 +88,21 @@ def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
 
 
 def tool_recall(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
-    """记忆检索。"""
-    ag = bridge.get(_agent_id(args))
+    """记忆检索。装了认知层时走**语义检索**（含同义扩展 + 遗忘加权）。"""
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
     query = str(args.get("query") or "")
     if not query:
         raise ValueError("query 不能为空")
     k = max(1, min(50, int(args.get("k") or 5)))
-    hits = ag.recall(query, k=k)
+    if cog is not None:
+        hits = cog.recall(query, k=k)
+    else:
+        hits = ag.recall(query, k=k)
     return {
         "agent_id": ag.agent_id,
         "query": query,
+        "mode": "semantic" if cog is not None else "lexical",
         "count": len(hits),
         "hits": [
             {
@@ -71,9 +110,102 @@ def tool_recall(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]
                 "brief": f.get("brief", ""),
                 "tags": list(f.get("tags", [])),
                 "salience": f.get("sal", f.get("salience", 1)),
+                # 仅语义模式有：融合分 / 语义分 / 记忆保留度 / 被唤起次数
+                **({"score": f.get("score"), "semantic": f.get("semantic"),
+                    "retention": f.get("retention"), "hits": f.get("hits")}
+                   if cog is not None else {}),
             }
             for f in hits
         ],
+    }
+
+
+def tool_semantic(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
+    """显式语义检索，并解释每一条为什么被召回（可解释性）。"""
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
+    query = str(args.get("query") or "")
+    if not query:
+        raise ValueError("query 不能为空")
+    if cog is None:
+        return {
+            "agent_id": aid, "query": query, "mode": "lexical",
+            "note": "未装 pasm-skills>=0.5.0 的认知层，退回字面匹配。",
+            "hits": [{"title": f.get("title", ""), "brief": f.get("brief", "")}
+                     for f in ag.recall(query, k=int(args.get("k") or 5))],
+        }
+    k = max(1, min(50, int(args.get("k") or 5)))
+    hits = cog.recall(query, k=k,
+                      use_focus=bool(args.get("use_focus", True)),
+                      use_forgetting=bool(args.get("use_forgetting", True)))
+    return {
+        "agent_id": aid,
+        "query": query,
+        "mode": "semantic",
+        "backend": getattr(cog.index.backend, "name", "?"),
+        "expanded": cog.index.bridge.expand(query)[:8],
+        "count": len(hits),
+        "hits": [
+            {
+                "title": h.get("title", ""),
+                "brief": h.get("brief", ""),
+                "tags": list(h.get("tags", [])),
+                "salience": h.get("sal", 1),
+                "score": h.get("score"),
+                "semantic": h.get("semantic"),
+                "retention": h.get("retention"),
+                "rehearsals": h.get("hits"),
+            }
+            for h in hits
+        ],
+        "hint": (
+            "score = 语义×0.62 + 记忆保留度×0.24 + 重要度×0.14 + 焦点加成。"
+            "retention 低说明这条很久没被唤起（正在遗忘）。"
+        ),
+    }
+
+
+def tool_focus(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
+    """焦点栈：查看或压入"现在在聊什么"。"""
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
+    if cog is None:
+        return {"agent_id": aid, "ok": False,
+                "error": "需要 pasm-skills>=0.5.0 的认知层"}
+    topic = str(args.get("topic") or "").strip()
+    if topic:
+        cog.focus.push(
+            topic,
+            entities=[str(e) for e in (args.get("entities") or [])],
+            weight=float(args.get("weight") or 1.0),
+        )
+    return {
+        "agent_id": aid,
+        "updated": bool(topic),
+        "depth": len(cog.focus),
+        "prompt": cog.focus.to_prompt(int(args.get("n") or 3)),
+        "stack": cog.focus.snapshot()[:8],
+    }
+
+
+def tool_consolidate(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
+    """记忆巩固（睡眠回放）：把高度相似的重复经历蒸馏成要点。
+
+    ``apply=false``（默认）只给建议，不落盘。
+    """
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
+    if cog is None:
+        return {"agent_id": aid, "ok": False,
+                "error": "需要 pasm-skills>=0.5.0 的认知层"}
+    apply = bool(args.get("apply", False))
+    rep = cog.consolidate(apply=apply)
+    return {
+        "agent_id": aid,
+        "applied": apply,
+        **rep.as_dict(),
+        "hint": ("这是建议，未落盘。想执行请再调一次并传 apply=true。"
+                 if not apply else "已写入要点记忆，源条目标记为已合并。"),
     }
 
 
@@ -85,13 +217,24 @@ def tool_observe(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
         raise ValueError("title 不能为空")
     sal = int(args.get("salience") or 2)
     sal = max(1, min(5, sal))
-    ag.observe(
-        title=title,
-        brief=str(args.get("brief") or ""),
-        tags=[str(t) for t in (args.get("tags") or [])],
-        salience=sal,
-        category=str(args.get("category") or "日常"),
-    )
+    ag, cog = _cog(bridge, str(args.get("agent_id") or "default"))
+    if cog is not None:
+        # 走中枢：写记忆 + 同步语义索引 + 更新焦点，一次做完
+        cog.observe(
+            title=title,
+            brief=str(args.get("brief") or ""),
+            tags=[str(t) for t in (args.get("tags") or [])],
+            salience=sal,
+            category=str(args.get("category") or "日常"),
+        )
+    else:
+        ag.observe(
+            title=title,
+            brief=str(args.get("brief") or ""),
+            tags=[str(t) for t in (args.get("tags") or [])],
+            salience=sal,
+            category=str(args.get("category") or "日常"),
+        )
     ag.save()
     return {
         "agent_id": ag.agent_id,
@@ -220,13 +363,39 @@ def tool_persona(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
 
 
 def tool_status(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
-    """状态快照：档位、记忆量、情绪、反馈数。"""
-    ag = bridge.get(_agent_id(args))
+    """状态快照：档位、记忆量、情绪、反馈数、认知层状态。"""
+    aid = _agent_id(args)
+    ag, cog = _cog(bridge, aid)
     snap = ag.summary()
     snap["persist_dir"] = str(ag.persist_dir)
     snap["bridge_root"] = str(bridge.persist_root)
     snap["loaded_agents"] = bridge.agent_ids()
+    if cog is not None:
+        try:
+            snap["cognition"] = {
+                "enabled": True,
+                "embedding_backend": cog.index.backend.name,
+                "indexed": len(cog.index),
+                "focus": cog.focus.to_prompt(),
+                "focus_depth": len(cog.focus),
+                "archive": cog.archive.stats(),
+                "memory": cog.curve.decay_report(_episodes_of(cog)),
+            }
+        except Exception as ex:
+            snap["cognition"] = {"enabled": True, "error": str(ex)}
+    else:
+        snap["cognition"] = {"enabled": False,
+                             "hint": "pip install -U 'pasm-skills>=0.5.0' 可启用"}
     return snap
+
+
+def _episodes_of(cog) -> List[Dict[str, Any]]:
+    """从中枢取出当前记忆条目（给 decay_report 用）。"""
+    try:
+        from pasm_skills.cognition import episodes_of  # type: ignore
+        return episodes_of(cog.agent)
+    except Exception:
+        return []
 
 
 def tool_save(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
@@ -274,6 +443,62 @@ TOOLS: List[Dict[str, Any]] = [
             "required": ["query"],
         },
         "fn": tool_recall,
+    },
+    {
+        "name": "pasm_semantic",
+        "description": (
+            "语义检索（认知层）：换一种说法也能命中，并解释每条为什么被召回。"
+            "适合当 pasm_recall 检索不到时的第二步 —— 它走向量 + 中文同义扩展，"
+            "并按'记忆保留度'加权（很久没被唤起的记忆会自然降权）。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "检索词（可以是完整的问句）"},
+                "k": {"type": "integer", "description": "返回条数，默认 5", "default": 5},
+                "use_focus": {"type": "boolean", "description": "是否按当前焦点加权，默认 true", "default": True},
+                "use_forgetting": {"type": "boolean", "description": "是否启用遗忘曲线，默认 true", "default": True},
+                "agent_id": {"type": "string", "default": "default"},
+            },
+            "required": ["query"],
+        },
+        "fn": tool_semantic,
+    },
+    {
+        "name": "pasm_focus",
+        "description": (
+            "焦点栈：查看或更新'现在在聊什么'。长对话里先压入当前话题，"
+            "后续检索会自动给相关内容加权，避免跑题。不传 topic 就是查看。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string", "description": "当前话题（不传则只看不写）"},
+                "entities": {"type": "array", "items": {"type": "string"}, "description": "涉及的实体/关键词"},
+                "weight": {"type": "number", "description": "权重，默认 1.0", "default": 1.0},
+                "n": {"type": "integer", "description": "渲染几条焦点，默认 3", "default": 3},
+                "agent_id": {"type": "string", "default": "default"},
+            },
+            "required": [],
+        },
+        "fn": tool_focus,
+    },
+    {
+        "name": "pasm_consolidate",
+        "description": (
+            "记忆巩固（睡眠回放）：把高度相似的重复经历蒸馏成一条要点，"
+            "并把源条目标记为已合并，避免记忆池被重复项撑爆。"
+            "默认只给建议（apply=false），确认后传 apply=true 执行。"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "apply": {"type": "boolean", "description": "是否真的执行（默认 false，只出建议）", "default": False},
+                "agent_id": {"type": "string", "default": "default"},
+            },
+            "required": [],
+        },
+        "fn": tool_consolidate,
     },
     {
         "name": "pasm_observe",

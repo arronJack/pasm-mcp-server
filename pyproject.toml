@@ -29,12 +29,16 @@ classifiers = [
 ]
 # 基座是**公开**的 pasm-skills（PyPI 已发布）；PASM 核心引擎是私有仓，
 # 本包**不依赖**它 —— 装到核心的机器会自动升到 bionic 档，没有也能跑（light 档）。
-dependencies = ["pasm-skills>=0.4.4"]
+# >=0.5.0 才有认知能力层（语义检索 / 遗忘曲线 / 巩固 / 焦点）。
+dependencies = ["pasm-skills>=0.5.0"]
 
 [project.optional-dependencies]
 # 想启用仿生层（真实情绪动力学 / 人格）时再装 torch：
 #   pip install "pasm-mcp-server[torch]"
 torch = ["torch"]
+# 想要本地语义向量（不依赖外部 API）时：
+#   pip install "pasm-mcp-server[embed]"
+embed = ["fastembed"]
 
 [project.urls]
 Homepage = "https://gitee.com/arronzheng/pasm-mcp-server"

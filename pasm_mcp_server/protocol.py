@@ -2,7 +2,7 @@
 
 只依赖标准库 —— 本包刻意**不依赖**官方 `mcp` Python SDK：
 stdio 上的 MCP 就是「换行分隔的 JSON-RPC 2.0」，自己实现可以做到零依赖、
-启动快（<100ms），也让本包能直接被 BaiLongma 这类用 Node SDK 的客户端拉起。
+启动快（<100ms），也让本包能直接被任意语言的客户端（Node / Python / Electron 外壳）拉起。
 
 版本协商策略（重要）
 --------------------
@@ -29,7 +29,7 @@ SUPPORTED_PROTOCOL_VERSIONS = (
 DEFAULT_PROTOCOL_VERSION = "2025-03-26"
 
 SERVER_NAME = "pasm-mcp-server"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 
 #: 服务端能力声明。只声明 tools —— 不声明就是不支持，别虚报。
 CAPABILITIES = {"tools": {}}

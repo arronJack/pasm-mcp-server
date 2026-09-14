@@ -183,6 +183,39 @@ def selftest() -> int:
         w = r["result"]["structuredContent"]["weights"]
         check("teach" in w, "pasm_feedback 作用于指定动作")
 
+        # tools/call: 语义检索（换说法命中：存的是"用户叫小志"，问"我叫什么名字"）
+        r = handle_message(
+            {"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+             "params": {"name": "pasm_semantic", "arguments": {"query": "我叫什么名字"}}}, bridge)
+        sem = r["result"].get("structuredContent") or {}
+        check(r["result"]["isError"] is False,
+              "pasm_semantic 可执行（mode=%s）" % sem.get("mode", "?"))
+        if sem.get("mode") == "semantic":
+            check(bool(sem.get("hits")), "语义检索：换说法也能命中")
+            check("score" in (sem.get("hits") or [{}])[0], "语义检索给出可解释打分")
+
+        # tools/call: 焦点栈
+        r = handle_message(
+            {"jsonrpc": "2.0", "id": 10, "method": "tools/call",
+             "params": {"name": "pasm_focus",
+                        "arguments": {"topic": "身份信息", "entities": ["小志"]}}}, bridge)
+        check(r["result"]["isError"] is False, "pasm_focus 可压入话题")
+
+        # tools/call: 巩固（默认只出建议，不落盘）
+        r = handle_message(
+            {"jsonrpc": "2.0", "id": 11, "method": "tools/call",
+             "params": {"name": "pasm_consolidate", "arguments": {}}}, bridge)
+        con = r["result"].get("structuredContent") or {}
+        check(r["result"]["isError"] is False and con.get("applied") is False,
+              "pasm_consolidate 默认只出建议（不落盘）")
+
+        # 状态里能看到认知层
+        r = handle_message(
+            {"jsonrpc": "2.0", "id": 12, "method": "tools/call",
+             "params": {"name": "pasm_status", "arguments": {}}}, bridge)
+        st = r["result"].get("structuredContent") or {}
+        check("cognition" in st, "pasm_status 报告认知层状态")
+
         # 未知工具 → 协议错误
         r = handle_message(
             {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
