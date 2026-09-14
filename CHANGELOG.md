@@ -20,6 +20,15 @@
 - **主流客户端配置示例**：Cursor / Claude Desktop / VS Code(Copilot) / 通用 stdio
 - `MANIFEST.in`，`dist` 打包就绪（`python -m build`）
 
+### 修复
+
+- **打包元数据版本号错误**：`pyproject.toml` 的 `version` 还是 `0.1.0`，而代码、README、
+  CHANGELOG 都已是 `0.2.0` —— 真打包出来会得到 `pasm_mcp_server-0.1.0-py3-none-any.whl`，
+  发到 PyPI 就是"用 0.1.0 的名义发布 0.2.0 的内容"，且与 `__version__` 自相矛盾。
+  已对齐为 `0.2.0`。
+- **`pyproject` 的 `description` 残留特定产品名**（此前清理漏了这一处，而它会被写进
+  PyPI 元数据公开可见）→ 改为通用表述"任意支持 MCP 的客户端"。
+
 ### 变更
 
 - `pasm_status` 增加 `cognition` 段：向量后端名、索引条数、焦点、归档、记忆强度分布
