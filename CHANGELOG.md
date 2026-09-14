@@ -26,10 +26,14 @@
 - `pasm_context` 增加 `cognition`（当前检索模式）与 `focus`（焦点提示词）字段
 - 依赖提升到 `pasm-skills>=0.5.0`；新增可选依赖组 `embed`（本地语义向量）
 - 文档与示例去掉对特定产品的依赖，改为通用接入说明
+- 日志可静默：宿主客户端若把 stderr 也收进自身日志，设 `PASM_MCP_QUIET=1` 即可
+  （工具失败信息仍通过 `isError` 内容回给模型，不影响纠错）
+- 补齐六仓同频的生态索引（此前五仓都有、本仓漏了）
+- README 自检项数由「10 项」更正为实际的「16 项」（新增 3 个工具后已不止 10）
 
 ### 验证
 
-- `pasm-mcp-server --selftest`：通过
+- `pasm-mcp-server --selftest`：通过（16 项）
 - `python examples/stdio_client_demo.py`：端到端通过
 
 ## [0.1.0] — 2026-09-15

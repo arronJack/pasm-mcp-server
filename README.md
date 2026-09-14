@@ -16,11 +16,31 @@
 
 ---
 
+## 〇、PASM 生态索引（六仓同频）
+
+| 仓 | 角色 | 可见性 | 版本 |
+|---|---|---|---|
+| `pasm-skills` | 基座：`BaseAgent` + 认知能力层 | 公开 | 0.5.0 |
+| `pasm-agents` | 成品智能体集（NPC / 陪伴 / 教学 / 验证） | 公开 | 0.4.5 |
+| **`pasm-mcp-server`（本仓）** | **MCP 接入层：给任意 AI 客户端装长期记忆** | 公开 | **0.2.0** |
+| `PASM-Lite` | 教学版 + 认知引擎接口 | 公开 | — |
+| `PASM` | 核心引擎（七层仿生 / 世界模型） | **私有** | 0.7.2 |
+| `pasm-qclaw` | 桌面应用发行通道 | 公开 | 0.29.1 |
+
+流向：`PASM`（核心）→ `pasm-skills`（基座）→ `pasm-agents`（智能体）→
+`pasm-mcp-server`（分发）→ `pasm-qclaw`（桌面产品）；`PASM-Lite` 是面向外界的教学窗口。
+
+地址：
+[Gitee](https://gitee.com/arronzheng/pasm-mcp-server) ·
+[GitHub](https://github.com/arronJack/pasm-mcp-server)
+
+---
+
 ## 一、快速开始
 
 ```bash
 pip install pasm-mcp-server
-pasm-mcp-server --selftest        # 自检（10 项）
+pasm-mcp-server --selftest        # 自检（16 项）
 ```
 
 ### 接入客户端（以 Cursor 为例）

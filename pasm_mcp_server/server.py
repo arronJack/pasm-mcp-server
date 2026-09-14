@@ -27,7 +27,14 @@ from .tools import call_tool, list_tools
 
 
 def _log(msg: str) -> None:
-    """日志一律走 stderr —— stdout 是协议通道，不能污染。"""
+    """日志一律走 stderr —— stdout 是协议通道，不能污染。
+
+    宿主客户端若把 stderr 也收进自己的日志，可设 ``PASM_MCP_QUIET=1`` 静默
+    （工具失败信息仍会通过 isError 内容回给模型，不影响纠错）。
+    """
+    import os
+    if os.environ.get("PASM_MCP_QUIET") == "1":
+        return
     print("[pasm-mcp] %s" % msg, file=sys.stderr, flush=True)
 
 
