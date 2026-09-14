@@ -1,0 +1,13 @@
+{
+  "_comment": "通用 MCP 客户端配置（Claude Desktop / Cursor / Cline 等使用 mcpServers 格式）。文件名通常是 claude_desktop_config.json 或 mcp.json，位置见各客户端文档。",
+  "mcpServers": {
+    "pasm": {
+      "command": "python",
+      "args": ["-m", "pasm_mcp_server"],
+      "env": {
+        "PASM_MCP_PERSONA": "{\"name\": \"小墨\", \"role\": \"认知陪伴\", \"tone\": \"温和、简洁\", \"temper\": 0.6, \"energy\": 0.5, \"play\": 0.4}",
+        "PASM_MCP_PERSIST_DIR": ""
+      }
+    }
+  }
+}

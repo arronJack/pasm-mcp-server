@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pasm-mcp-server"
+version = "0.1.0"
+description = "PASM 认知内核的 MCP 服务器 —— 把 PASM 的记忆/情绪/动作/反馈能力暴露成标准 MCP 工具，挂进任何 MCP 客户端（BaiLongma / Claude Desktop / Cursor / 自研 Agent）"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "arronzheng" }]
+keywords = [
+    "pasm", "mcp", "model-context-protocol", "agent", "cognition",
+    "memory", "emotion", "cognitive-architecture", "tool-server",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# 基座是**公开**的 pasm-skills（PyPI 已发布）；PASM 核心引擎是私有仓，
+# 本包**不依赖**它 —— 装到核心的机器会自动升到 bionic 档，没有也能跑（light 档）。
+dependencies = ["pasm-skills>=0.4.4"]
+
+[project.optional-dependencies]
+# 想启用仿生层（真实情绪动力学 / 人格）时再装 torch：
+#   pip install "pasm-mcp-server[torch]"
+torch = ["torch"]
+
+[project.urls]
+Homepage = "https://gitee.com/arronzheng/pasm-mcp-server"
+Repository = "https://github.com/arronJack/pasm-mcp-server"
+Source = "https://gitee.com/arronzheng/pasm-mcp-server"
+Issues = "https://gitee.com/arronzheng/pasm-mcp-server/issues"
+
+[project.scripts]
+pasm-mcp-server = "pasm_mcp_server.server:main"
+
+[tool.setuptools]
+packages = ["pasm_mcp_server"]
+
+[tool.setuptools.package-data]
+pasm_mcp_server = ["py.typed"]
