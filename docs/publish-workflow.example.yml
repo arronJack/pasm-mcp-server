@@ -1,3 +1,12 @@
+# PyPI 发布流水线（示例）
+#
+# 用法：把本文件放到 `.github/workflows/publish.yml` 即可生效。
+# 之所以默认不放在 .github/workflows/：推送 workflow 文件需要 PAT 带 `workflow` 权限，
+# 用户的发布令牌不一定有（也不该随便给）。需要时手动复制过去即可。
+#
+#   mkdir -p .github/workflows
+#   cp docs/publish-workflow.example.yml .github/workflows/publish.yml
+
 name: publish
 
 on:

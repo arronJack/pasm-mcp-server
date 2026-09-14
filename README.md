@@ -172,6 +172,10 @@ twine check dist/*
 twine upload dist/*                  # 需要 PyPI token
 ```
 
+> GitHub Actions 流水线见 [`docs/publish-workflow.example.yml`](docs/publish-workflow.example.yml)
+> （放到 `.github/workflows/publish.yml` 即生效；默认不放在那里是因为推送 workflow 需要
+> PAT 带 `workflow` 权限）。
+
 ---
 
 ## 许可
