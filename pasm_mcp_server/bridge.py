@@ -134,10 +134,22 @@ class CognitiveBridge:
             p = dict(self._default_persona)
             if persona:
                 p.update(persona)
+            # ---- V2 实验开关（2026-09-29）：PASM2=1 时经基座探测工厂换
+            # pasm2 认知后端；pasm2 未安装或构造失败时基座会如实回退 V1。
+            # 默认（PASM2 未设）：路径与历史版本逐字节一致。
+            backend = None
+            if os.environ.get("PASM2", "").strip().lower() in ("1", "true", "yes"):
+                try:
+                    from pasm_skills.sdk.backend import create_backend
+                    backend = create_backend(
+                        self.persist_root / agent_id, backend_choice="v2")
+                except Exception:
+                    backend = None            # 诚实回退默认路径
             self._agents[agent_id] = McpAgent(
                 agent_id=agent_id,
                 persona=p,
                 persist_dir=self.persist_root / agent_id,
+                backend=backend,
             )
         return self._agents[agent_id]
 
