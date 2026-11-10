@@ -2,6 +2,39 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.0] — 2026-11-10
+
+### 变更（默认认知后端 V1 → V2）
+
+- **默认走 pasm2 V2 后端**：此前只有 `PASM2=1` 才切 V2 → 实际部署几乎永远跑 V1，
+  新引擎等于没上线。现在默认 `create_backend(backend_choice="v2")`；
+  pasm2 不可用 / 构造失败 → 工厂**如实回退 V1**（不虚构 v2 能力）。
+- **逃生舱**：`PASM_BACKEND=v1`（或 `PASM2=0/false/no/off`）强制 V1。
+- 为此在 `pasm2` 仓补齐了 V2 后端的基座契约：`episodes()`（认知层语义索引的数据源，
+  此前缺它会让 `pasm_recall` / `pasm_semantic` 命中 0）、`feedback()` 词汇表对齐
+  （praise 不再被当负反馈）、`persist_dir` + `save()/load()`（V2 认知状态可落盘续跑）。
+
+### 新增
+
+- **`pasm_context` 增加 `brief` 字段**：一段可直接注入提示词的紧凑上下文
+  （此刻心情 + 你记得的几件事 + 当前焦点），几十 tok。
+  此前整包返回体（recalled 全量 brief + persona 全量 + action_pool + hint）
+  直接塞进提示词实测约 500 tok —— **省 token 是 PASM 的初心**，
+  客户端现在不必自己裁剪。
+- **`pasm_status` 增加 `engine_backend`**：如实申报当前跑的是哪套引擎
+  （此前不可见 → "到底用的 V1 还是 V2"只能靠猜，属于隐性缺口）。
+
+### 验证
+
+- `pasm-mcp-server --selftest`：**19/19 全绿**（V2 默认下）。
+- 基座 `pasm-skills selftest`：通过。
+
+### 兼容性
+
+- 行为变化：默认引擎从 V1 变 V2。语义检索 / 焦点 / 遗忘等认知层能力不变
+  （认知层在基座侧，与后端解耦）；V2 的记忆与情绪状态现在会落盘。
+- 需要 v1 行为的客户端：设 `PASM_BACKEND=v1`。
+
 ## [0.2.1] — 2026-09-29
 
 ### 新增

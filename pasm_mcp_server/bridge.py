@@ -53,6 +53,21 @@ DEFAULT_PERSONA: Dict[str, Any] = {
 }
 
 
+def _force_v1() -> bool:
+    """显式要求走 V1（逃生舱）。
+
+    认两种写法：``PASM_BACKEND=v1``（基座工厂的标准变量）与
+    ``PASM2=0/false/no/off``（沿用旧的实验开关语义，关掉即回到 V1）。
+    """
+    b = os.environ.get("PASM_BACKEND", "").strip().lower()
+    if b in ("v1", "pasm1"):
+        return True
+    v = os.environ.get("PASM2", "").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return True
+    return False
+
+
 class McpAgent(BaseAgent):
     """MCP 场景下的 PASM 智能体：动作池与回复模板都可配置，其余交给基座。"""
 
@@ -134,17 +149,19 @@ class CognitiveBridge:
             p = dict(self._default_persona)
             if persona:
                 p.update(persona)
-            # ---- V2 实验开关（2026-09-29）：PASM2=1 时经基座探测工厂换
-            # pasm2 认知后端；pasm2 未安装或构造失败时基座会如实回退 V1。
-            # 默认（PASM2 未设）：路径与历史版本逐字节一致。
+            # ---- 认知后端选择（v0.3.0）：默认 V2（pasm2），V1 为诚实回退。
+            # 为什么改默认：PASM 主推 V2，此前只有 PASM2=1 才走 V2 →
+            # 实际部署几乎永远跑 V1，新引擎等于没上线。
+            # 逃生舱：PASM_BACKEND=v1（或 PASM2=0/false/no）强制 V1。
+            # 诚实回退：pasm2 未安装 / 构造失败 → 基座工厂如实回退 V1。
             backend = None
-            if os.environ.get("PASM2", "").strip().lower() in ("1", "true", "yes"):
-                try:
-                    from pasm_skills.sdk.backend import create_backend
-                    backend = create_backend(
-                        self.persist_root / agent_id, backend_choice="v2")
-                except Exception:
-                    backend = None            # 诚实回退默认路径
+            choice = "v1" if _force_v1() else "v2"
+            try:
+                from pasm_skills.sdk.backend import create_backend
+                backend = create_backend(
+                    self.persist_root / agent_id, backend_choice=choice)
+            except Exception:
+                backend = None            # 诚实回退默认路径
             self._agents[agent_id] = McpAgent(
                 agent_id=agent_id,
                 persona=p,

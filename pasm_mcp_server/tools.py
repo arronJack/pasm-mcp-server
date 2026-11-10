@@ -46,6 +46,32 @@ def _cog(bridge: CognitiveBridge, agent_id: str) -> Tuple[Any, Optional[Any]]:
     return ag, hub
 
 
+def _compact_brief(ag, facts, cog) -> str:
+    """紧凑版上下文（给客户端**直接注入提示词**用，替代整包 JSON）。
+
+    为什么要它：``pasm_context`` 的整个返回体（recalled 全量 brief + persona 全量
+    + action_pool + hint）直接塞进提示词实测约 500 tok，而真正影响回话的信息只有
+    几十 tok。**省 token 是 PASM 的初心**，所以额外给一份可直接注入的紧凑文本，
+    客户端不必自己裁剪（省下的正是重复注入的历史与冗余结构）。
+    """
+    parts = []
+    try:
+        parts.append("此刻心情 %+.2f" % float(ag.mood))
+    except Exception:
+        pass
+    titles = "、".join(str(f.get("title") or "") for f in (facts or [])[:3]
+                       if f.get("title"))
+    if titles:
+        parts.append("你记得：%s" % titles)
+    try:
+        focus = (cog.focus.to_prompt() if cog is not None else "") or ""
+    except Exception:
+        focus = ""
+    if focus.strip():
+        parts.append(focus.strip())
+    return "｜".join(parts)
+
+
 def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
     """取认知上下文（只读，不写记忆）。这是**注入提示词**用的一号工具。"""
     aid = _agent_id(args)
@@ -80,6 +106,9 @@ def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
         "growth_stage": ag.state.growth_stage,
         "total_interactions": ag.state.total_interactions,
         "action_pool": ag.action_pool(),
+        # 紧凑版：客户端要省 token 就直接注入这个（几十 tok），
+        # 不用把上面整包 JSON 塞进提示词。
+        "brief": _compact_brief(ag, facts, cog),
         "hint": (
             "把 recalled 里的内容当作'你确实记得的事'写进回复；"
             "mood 决定语气；action_pool 是当前可选行为。"
@@ -370,6 +399,12 @@ def tool_status(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]
     snap["persist_dir"] = str(ag.persist_dir)
     snap["bridge_root"] = str(bridge.persist_root)
     snap["loaded_agents"] = bridge.agent_ids()
+    # 诚实申报：当前到底跑的是哪套认知引擎（V2=pasm2 / V1=核心档 / 轻量档）。
+    # 此前这个信息不可见 → 「MCP 实际用 V1 还是 V2」只能靠猜，属于隐性缺口。
+    try:
+        snap["engine_backend"] = type(getattr(ag, "_core", None)).__name__
+    except Exception:
+        snap["engine_backend"] = "unknown"
     if cog is not None:
         try:
             snap["cognition"] = {
