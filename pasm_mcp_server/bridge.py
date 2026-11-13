@@ -162,6 +162,15 @@ class CognitiveBridge:
                     self.persist_root / agent_id, backend_choice=choice)
             except Exception:
                 backend = None            # 诚实回退默认路径
+            # P11-D3（2026-11-13）：V2 backend 拿到 persist_dir 后，构造时
+            # **不会自动 load()** —— 必须在这里显式恢复，否则跨重启后
+            # 人格/情绪/自传体记忆全部回到出厂（实测 episodes()=0 →
+            # 语义索引永远建不起来，pasm_recall 全空）。
+            if backend is not None and hasattr(backend, "load"):
+                try:
+                    backend.load()
+                except Exception:
+                    pass                  # 无历史状态 → 全新开始，不算错误
             self._agents[agent_id] = McpAgent(
                 agent_id=agent_id,
                 persona=p,
@@ -175,11 +184,24 @@ class CognitiveBridge:
         return sorted(self._agents.keys())
 
     def save_all(self) -> List[str]:
-        """落盘所有已加载的智能体（进程退出前调用）。"""
+        """落盘所有已加载的智能体（进程退出前调用）。
+
+        P11-D3（2026-11-13）：``ag.save()`` 只写基座 state 层
+        （agent_state.json），不写 V2 引擎的 mind 状态（记忆图/自传体/
+        情绪/心境…）。缺 ``core.save()`` 时 ``pasm2-state.json`` 从不
+        落盘，下次启动 ``core.load()`` 无处可读 —— 跨重启失忆的另一半
+        根因。不吞 core.save 的异常以外的错误：core 落盘失败要留下痕迹。
+        """
         saved = []
         for aid, ag in self._agents.items():
             try:
                 ag.save()
+                core = getattr(ag, "_core", None)
+                if core is not None and hasattr(core, "save"):
+                    try:
+                        core.save()
+                    except Exception:
+                        pass          # core 落盘失败不阻塞 state 落盘
                 saved.append(aid)
             except Exception:
                 pass

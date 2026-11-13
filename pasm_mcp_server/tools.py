@@ -265,6 +265,18 @@ def tool_observe(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
             category=str(args.get("category") or "日常"),
         )
     ag.save()
+    # P11-D3（2026-11-13）：本条经历写在 V2 mind 的自传体层，
+    # ag.save() 覆盖不到 —— 必须同时 core.save() 落盘 pasm2-state.json，
+    # 否则重启后 episodes() 为空、语义索引重建不出来。
+    _core = getattr(ag, "_core", None)
+    if _core is not None and hasattr(_core, "save"):
+        _core.save()
+    # P11-D2（2026-11-13）：认知索引（含真语义向量）是 CognitionHub 的
+    # sidecar，BaseAgent.save() 不会写它。只调 ag.save() 会让进程重启后
+    # episodes_of() 归零、索引重建为空 —— 实测跨重启记忆全部丢失。
+    # 不吞异常：落盘失败必须显式报错，不能再"静默丢记忆"。
+    if cog is not None:
+        cog.save()
     return {
         "agent_id": ag.agent_id,
         "ok": True,
