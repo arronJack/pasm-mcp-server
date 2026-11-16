@@ -14,3 +14,4 @@ venv/
 # 本地运行时状态（不要入库）
 .pasm-mcp/
 local.json
+tests/_ab_persist/

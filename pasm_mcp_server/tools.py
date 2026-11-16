@@ -15,6 +15,7 @@ import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .bridge import CognitiveBridge
+from .cognitive_digest import cognitive_digest
 
 # 本地开发逃生口（与 bridge 同款）：PASM_SKILLS_PATH 指向 pasm-skills 仓库根目录
 if os.environ.get("PASM_SKILLS_PATH"):
@@ -82,7 +83,7 @@ def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
         facts = cog.recall(query, k=k)
     else:
         facts = ag.recall(query, k=k) if query else []
-    return {
+    ctx = {
         "agent_id": ag.agent_id,
         "tier": ag.tier,
         "query": query,
@@ -106,14 +107,31 @@ def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
         "growth_stage": ag.state.growth_stage,
         "total_interactions": ag.state.total_interactions,
         "action_pool": ag.action_pool(),
-        # 紧凑版：客户端要省 token 就直接注入这个（几十 tok），
-        # 不用把上面整包 JSON 塞进提示词。
-        "brief": _compact_brief(ag, facts, cog),
         "hint": (
             "把 recalled 里的内容当作'你确实记得的事'写进回复；"
             "mood 决定语气；action_pool 是当前可选行为。"
         ),
     }
+    # ---- 省 token：认知摘要（阶段 12）。保留旧紧凑版供兼容/回滚，宿主零改动即受益。----
+    # brief_legacy = 旧 _compact_brief（只带 mood + 3 标题，丢人格/显著度/情绪语义）
+    # brief_digest = 新认知摘要（身份+情绪语义+人格+显著度记忆，固定预算整块丢弃）
+    # brief        = 默认指向 digest；传 digest=false 可回滚到 legacy。
+    legacy = _compact_brief(ag, facts, cog)
+    # 默认 80 字档：实测 ≈38 tok，比旧 brief(58 tok) 更省且信息更全（保住
+    # 身份/情绪/人格/显著度记忆，只丢给宿主的 hint）；220 字档反而比 legacy 贵，
+    # 仅当用户明确要带 hint 时传 digest_chars=220。（阶段12 A/B 对照抓到的坑）
+    d = cognitive_digest(ctx, max_chars=int(args.get("digest_chars") or 80))
+    digest = d["text"]
+    use_digest = str(args.get("digest", "true")).lower() not in ("false", "0", "no")
+    ctx.update({
+        "brief": digest if use_digest else legacy,
+        "brief_legacy": legacy,
+        "brief_digest": digest,
+        "brief_mode": "digest" if use_digest else "legacy",
+        "digest_meta": {"chars": d["chars"], "approx_tok": d["approx_tok"],
+                        "kept": d["kept"], "dropped": d["dropped"]},
+    })
+    return ctx
 
 
 def tool_recall(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]:
@@ -472,6 +490,8 @@ TOOLS: List[Dict[str, Any]] = [
                 "query": {"type": "string", "description": "当前用户说的话/话题，用于检索相关记忆"},
                 "k": {"type": "integer", "description": "最多返回几条记忆，默认 5", "default": 5},
                 "agent_id": {"type": "string", "description": "智能体 id，默认 default。不同 id 记忆互相隔离", "default": "default"},
+                "digest": {"type": "boolean", "description": "brief 字段是否用认知摘要（默认 true，省 token 且不丢情绪/人格/显著度记忆；false 回滚到旧紧凑版）", "default": True},
+                "digest_chars": {"type": "integer", "description": "认知摘要字符预算，默认 80（≈38 tok，比旧 brief 更省且保住人格/显著度记忆）；要连 hint 一起带可传 220（≈80 tok）", "default": 80},
             },
             "required": [],
         },

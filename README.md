@@ -160,13 +160,46 @@ export PASM_EMBED_KEY="<key>"
 
 ## 五、PASM 在整条链路里的位置
 
-它**不生成语言**。正确用法是：先把 `pasm_context` 的返回拼进提示词，再让你自己的模型说话。
+它**不生成语言**。正确用法是：先从 `pasm_context` 取认知上下文，再让你自己的模型说话。
 
 ```
-用户说话 → pasm_context(query=用户的话) → 拿到 recalled / mood / action_pool
-        → 拼进你的系统提示词 → 你的模型生成回复
+用户说话 → pasm_context(query=用户的话) → 注入 brief 字段（不要整包！）
+        → 你的模型生成回复
         → pasm_observe(值得记的事) → pasm_feedback(用户反应)
 ```
+
+### 省 token 接入规范（重要）
+
+**把 `pasm_context` 返回的 `brief` 字段拼进系统提示词，不要把整个返回体塞进去。**
+整包 JSON 含 `recalled` 全量摘要 / `persona` / `action_pool` / `hint` 等结构，实测约
+**900 tok/轮**；而 `brief` 是专门为此生成的**认知摘要**，默认 ≈**38 tok**，省 ~96%。
+
+`brief` 摘要固定保住 PASM 相对通用 LLM **最独特**的东西，超预算按优先级整块丢弃（不腰斩）：
+
+| 块 | 内容 | 紧预算下 |
+|---|---|---|
+| 身份锚 + 情绪语义 | `我是小墨·认知陪伴`、`情绪低落(-0.62)`（不是裸数字） | **永不丢** |
+| 人格画像 | `性格：温和、平和`（被反馈塑形过的行为倾向） | 保 |
+| 显著度记忆 | `记得：姓名、猫的禁忌…`（按 salience 排序，不是召回顺序） | 保 |
+| 提示语 hint | 给宿主的操作说明 | 可丢 |
+
+`pasm_context` 的相关字段：
+
+| 字段 | 说明 |
+|---|---|
+| `brief` | **注入用**。默认即认知摘要（省 token 且不丢情绪/人格/记忆） |
+| `brief_digest` | 始终是认知摘要（不受开关影响，供对照） |
+| `brief_legacy` | 始终是全量旧紧凑版（只带 mood + 3 标题，兼容旧客户端） |
+| `brief_mode` | `digest` / `legacy`，当前 `brief` 用的哪种 |
+| `digest_meta` | 摘要的字符数 / tok 估算 / kept / dropped（可观测，便于审计） |
+
+可选参数：
+- `digest: true|false` —— `brief` 用摘要还是旧紧凑版（默认 `true`；`false` 回滚到旧行为）。
+- `digest_chars: int` —— 摘要字符预算，默认 `80`（≈38 tok）；要连 hint 一起带可传 `220`（≈80 tok）。
+  注意 220 档虽然信息更全，但仍远小于整包；只有确实需要宿主操作提示时才调大。
+
+> 需要结构化细节（每条记忆的全量 brief / tags / 分类）时，另行调用 `pasm_recall`，
+> 不要为了这些细节把 `pasm_context` 整包塞进提示词——那正是被上面的规范省掉的成本。
 
 ---
 

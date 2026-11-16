@@ -2,6 +2,29 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.3.1] — 2026-11-16
+
+### 变更（省 token：认知摘要进 brief）
+
+- **`pasm_context.brief` 升级为「认知摘要」**：身份锚 + 情绪语义 + 人格画像 + 显著度
+  记忆，按优先级整块丢弃（坑 9 口径），默认 80 字档 ≈38 tok。实测整包 ~923 tok →
+  brief 38 tok（省 ~96%），且比旧紧凑版（58 tok，只带 mood+3 标题）**更省且更全**。
+  宿主无需改代码，注入 `brief` 字段即受益。
+- **兼容性字段**：新增 `brief_digest`（始终是摘要）/ `brief_legacy`（始终是旧紧凑版）/
+  `brief_mode` / `digest_meta`（kept/dropped 可观测）；`digest=false` 可回滚到旧行为，
+  `digest_chars` 调预算（默认 80，要带 hint 可传 220）。
+- **新增 `cognitive_digest.py`**：runtime 自包含摘要模块（零依赖 pasm2/pasm-skills），
+  与 PASM 仓 analysis 版用黄金向量校验逐字一致，防两份实现漂移。
+- **接入规范**：README 第五节明确「注入 `brief` 而非整包」，含字段表与省 token 口径。
+
+### 验证
+
+- 新增 `tests/test_cognitive_digest_ab.py`：A/B 对照全 PASS（一致性 / 回滚 / 信息保真 /
+  省 token / preflight 防假绿）。
+- `pasm-mcp-server --selftest`：18/18 全绿，无回归。
+- 审核整改：修复 bench 在 Ollama 未起时召回 0 条导致的反例**空洞假绿**（加 preflight
+  门禁 + 基线必须有 memory 块 + 报告带时间戳备份），整改后召回 5 条、数字可信。
+
 ## [0.3.0] — 2026-11-10
 
 ### 变更（默认认知后端 V1 → V2）
