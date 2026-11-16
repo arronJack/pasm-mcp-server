@@ -24,7 +24,7 @@
 | `pasm-skills` | 基座：`BaseAgent` + 认知能力层 + `create_backend()` 探测工厂 | 公开 | 0.6.3 |
 | `pasm-framework` | 应用框架：HTTP 服务 / 路由 / 插件 + `CognitiveAssembler.v1()/v2()` | 公开 | 0.5.4 |
 | `pasm-agents` | 成品智能体集（NPC / 陪伴 / 教学 / 客服 / 验证） | 公开 | 0.5.0 |
-| **`pasm-mcp-server`（本仓）** | **MCP 接入层：给任意 AI 客户端装长期记忆（`PASM2=1` 切 V2）** | **公开** | **0.2.1** |
+| **`pasm-mcp-server`（本仓）** | **MCP 接入层：给任意 AI 客户端装长期记忆（`PASM2=1` 切 V2）** | **公开** | **0.3.1** |
 | `pasm-domain-advisor` · `pasm-medical` · `pasm-customer-service` | 领域智能体：领域顾问引擎 / 医疗辅助 / 专业客服 | 公开 | 0.1.1 · 0.1.0 · 0.2.0 |
 | `PASM-Lite` | 教学版 + 认知引擎接口（不接 V2，保持纯净） | 公开 | — |
 | `PASM` | 核心引擎（七层仿生 / 世界模型，含 `pasm2/`；桌面源码 0.31.16） | 私有 | 0.7.2 |
