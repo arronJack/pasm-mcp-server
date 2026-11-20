@@ -104,6 +104,8 @@ def tool_context(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
                 "tags": list(f.get("tags", [])),
                 "category": f.get("cat", f.get("category", "")),
                 "salience": f.get("sal", f.get("salience", 1)),
+                # 语义模式暴露相对置信度：接近 0 表示该条对本问题是弱命中
+                **({"relevance": f.get("relevance")} if cog is not None else {}),
             }
             for f in facts
         ],
@@ -147,8 +149,9 @@ def tool_recall(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]
     if not query:
         raise ValueError("query 不能为空")
     k = max(1, min(50, int(args.get("k") or 5)))
+    min_rel = float(args.get("min_relevance") or 0.0)
     if cog is not None:
-        hits = cog.recall(query, k=k)
+        hits = cog.recall(query, k=k, min_relevance=min_rel)
     else:
         hits = ag.recall(query, k=k)
     return {
@@ -156,14 +159,18 @@ def tool_recall(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any]
         "query": query,
         "mode": "semantic" if cog is not None else "lexical",
         "count": len(hits),
+        "relevance_gate": min_rel if min_rel > 0 else "off",
+        "note": ("返回空 = 没有能支撑此问题的记忆，请如实说明而非编造"
+                 if min_rel > 0 and not hits else None),
         "hits": [
             {
                 "title": f.get("title", ""),
                 "brief": f.get("brief", ""),
                 "tags": list(f.get("tags", [])),
                 "salience": f.get("sal", f.get("salience", 1)),
-                # 仅语义模式有：融合分 / 语义分 / 记忆保留度 / 被唤起次数
+                # 仅语义模式有：融合分 / 语义分 / 记忆保留度 / 被唤起次数 / 相对置信度
                 **({"score": f.get("score"), "semantic": f.get("semantic"),
+                    "relevance": f.get("relevance"),
                     "retention": f.get("retention"), "hits": f.get("hits")}
                    if cog is not None else {}),
             }
@@ -510,6 +517,13 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "query": {"type": "string", "description": "检索词"},
                 "k": {"type": "integer", "description": "返回条数，默认 5", "default": 5},
+                "min_relevance": {
+                    "type": "number", "default": 0.0,
+                    "description": ("可选相关性闸门（默认 0 = 关闭，保持旧行为）。"
+                                    "设为正值时，只返回语义分显著高于本批均值的记忆；"
+                                    "返回空表示'没有能支撑此问题的记忆'，宿主应如实说明而非编造。"
+                                    "离线 hashing 后端建议 0.15，嵌入后端需自行标定。"),
+                },
                 "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["query"],
