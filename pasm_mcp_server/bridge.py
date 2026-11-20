@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -118,6 +120,37 @@ class McpAgent(BaseAgent):
         return dict(self.persona)
 
 
+# ============================================================ agent_id 安全
+# 课题 C（2026-11-20）实测缺陷：_agent_id() 只 str() 不清洗，bridge 又直接
+# persist_root / agent_id 拼路径 → 路径穿越 / 绝对路径写 / 大小写碰撞 / NFC-NFD 分裂。
+# 这里做统一收口：工具层与桥层都调用，纵深防御。
+_AGENT_ID_RE = re.compile(r"^[\w.\-]{1,64}$", re.UNICODE)
+_WIN_RESERVED = {"con", "prn", "aux", "nul"} | \
+    {f"com{i}" for i in range(1, 10)} | {f"lpt{i}" for i in range(1, 10)}
+
+
+def validate_agent_id(value: Any) -> str:
+    """把外部传入的 agent_id 收敛成安全的目录名；非法值明确报错。
+
+    - NFC 归一：同一身份的 NFC/NFD 写法合并到同一目录
+    - 白名单：字母/数字/Unicode 文字/`_`/`-`/`.`，1-64 字符（中文 id 可用）
+    - 拒绝 `.`、`..`、路径分隔符、控制字符、Windows 保留设备名
+    - 不做静默改写：非法 id 报错，避免"换个目录 = 记忆凭空消失"
+    """
+    raw = "" if value is None else str(value)
+    aid = unicodedata.normalize("NFC", raw).strip()
+    if not aid or aid in (".", ".."):
+        raise ValueError("agent_id 不能为空，也不能是 . 或 ..")
+    if not _AGENT_ID_RE.fullmatch(aid):
+        raise ValueError(
+            "agent_id 只允许字母、数字、文字、_、-、.（1-64 字符）；"
+            "禁止空格、路径分隔符、控制字符与绝对路径"
+        )
+    if aid.split(".")[0].lower() in _WIN_RESERVED:
+        raise ValueError(f"agent_id 不能使用 Windows 保留设备名：{aid}")
+    return aid
+
+
 class CognitiveBridge:
     """按 agent_id 管理 McpAgent 实例。"""
 
@@ -145,6 +178,32 @@ class CognitiveBridge:
         已存在的 agent 想改人格请走 pasm_persona 工具 —— 否则每次调用传不同 persona
         会造成"人格抖动"，而 persona 是长期资产，不该被单次调用覆盖。
         """
+        # ★ 纵深防御：工具层会校验，这里再校验一次，防止绕过工具直接调 bridge。
+        agent_id = validate_agent_id(agent_id)
+        agent_dir = self.persist_root / agent_id
+        resolved = agent_dir.resolve()
+        root_resolved = self.persist_root.resolve()
+        if resolved != root_resolved and root_resolved not in resolved.parents:
+            raise ValueError(f"agent_id 逃逸出数据目录：{agent_id}")
+        # 大小写 / Unicode 同形碰撞检测：Windows 文件系统大小写不敏感，
+        # AliceCase 与 alicecase 会落进同一目录 → 跨身份记忆串味。
+        # 用 sidecar 标记记录创建者，命中不一致就明确拒绝，而不是静默共享。
+        if agent_dir.exists():
+            marker = agent_dir / ".agent_id"
+            if marker.exists():
+                try:
+                    owner = marker.read_text(encoding="utf-8").strip()
+                except Exception:
+                    owner = ""
+                if owner and owner != agent_id:
+                    raise ValueError(
+                        f"agent_id 冲突：目录已属于 {owner!r}，不能再用 {agent_id!r} 打开"
+                    )
+            else:
+                try:
+                    marker.write_text(agent_id, encoding="utf-8")
+                except Exception:
+                    pass
         if agent_id not in self._agents:
             p = dict(self._default_persona)
             if persona:
@@ -177,6 +236,14 @@ class CognitiveBridge:
                 persist_dir=self.persist_root / agent_id,
                 backend=backend,
             )
+            # 新建目录也要打标记，否则首次创建后立刻用大小写变体打开仍会共享
+            try:
+                agent_dir.mkdir(parents=True, exist_ok=True)
+                marker = agent_dir / ".agent_id"
+                if not marker.exists():
+                    marker.write_text(agent_id, encoding="utf-8")
+            except Exception:
+                pass
         return self._agents[agent_id]
 
     def agent_ids(self) -> List[str]:

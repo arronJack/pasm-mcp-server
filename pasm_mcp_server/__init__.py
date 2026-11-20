@@ -21,6 +21,6 @@ Cursor、自研 Agent）都能把它挂上去，让自己的模型获得跨会�
 """
 from __future__ import annotations
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = ["__version__"]

@@ -14,7 +14,7 @@ import os
 import sys
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .bridge import CognitiveBridge
+from .bridge import CognitiveBridge, validate_agent_id
 from .cognitive_digest import cognitive_digest
 
 # 本地开发逃生口（与 bridge 同款）：PASM_SKILLS_PATH 指向 pasm-skills 仓库根目录
@@ -30,7 +30,12 @@ except Exception:  # pragma: no cover
 
 
 def _agent_id(args: Dict[str, Any]) -> str:
-    return str(args.get("agent_id") or "default")
+    """统一收口：所有工具都从这里取 agent_id，非法值明确拒绝。
+
+    课题 C 实测：原先只 ``str(args.get(...) or "default")``，
+    ``../`` / 绝对路径 / 空白 id 会直接拼进 persist_root 造成越权写。
+    """
+    return validate_agent_id(args.get("agent_id") or "default")
 
 
 def _cog(bridge: CognitiveBridge, agent_id: str) -> Tuple[Any, Optional[Any]]:
@@ -264,7 +269,7 @@ def tool_observe(args: Dict[str, Any], bridge: CognitiveBridge) -> Dict[str, Any
         raise ValueError("title 不能为空")
     sal = int(args.get("salience") or 2)
     sal = max(1, min(5, sal))
-    ag, cog = _cog(bridge, str(args.get("agent_id") or "default"))
+    ag, cog = _cog(bridge, _agent_id(args))
     if cog is not None:
         # 走中枢：写记忆 + 同步语义索引 + 更新焦点，一次做完
         cog.observe(
@@ -489,7 +494,7 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "query": {"type": "string", "description": "当前用户说的话/话题，用于检索相关记忆"},
                 "k": {"type": "integer", "description": "最多返回几条记忆，默认 5", "default": 5},
-                "agent_id": {"type": "string", "description": "智能体 id，默认 default。不同 id 记忆互相隔离", "default": "default"},
+                "agent_id": {"type": "string", "description": "智能体 id，默认 default。不同 id 记忆互相隔离", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
                 "digest": {"type": "boolean", "description": "brief 字段是否用认知摘要（默认 true，省 token 且不丢情绪/人格/显著度记忆；false 回滚到旧紧凑版）", "default": True},
                 "digest_chars": {"type": "integer", "description": "认知摘要字符预算，默认 80（≈38 tok，比旧 brief 更省且保住人格/显著度记忆）；要连 hint 一起带可传 220（≈80 tok）", "default": 80},
             },
@@ -505,7 +510,7 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "query": {"type": "string", "description": "检索词"},
                 "k": {"type": "integer", "description": "返回条数，默认 5", "default": 5},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["query"],
         },
@@ -525,7 +530,7 @@ TOOLS: List[Dict[str, Any]] = [
                 "k": {"type": "integer", "description": "返回条数，默认 5", "default": 5},
                 "use_focus": {"type": "boolean", "description": "是否按当前焦点加权，默认 true", "default": True},
                 "use_forgetting": {"type": "boolean", "description": "是否启用遗忘曲线，默认 true", "default": True},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["query"],
         },
@@ -544,7 +549,7 @@ TOOLS: List[Dict[str, Any]] = [
                 "entities": {"type": "array", "items": {"type": "string"}, "description": "涉及的实体/关键词"},
                 "weight": {"type": "number", "description": "权重，默认 1.0", "default": 1.0},
                 "n": {"type": "integer", "description": "渲染几条焦点，默认 3", "default": 3},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
@@ -561,7 +566,7 @@ TOOLS: List[Dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "apply": {"type": "boolean", "description": "是否真的执行（默认 false，只出建议）", "default": False},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
@@ -581,7 +586,7 @@ TOOLS: List[Dict[str, Any]] = [
                 "tags": {"type": "array", "items": {"type": "string"}, "description": "标签，便于检索命中"},
                 "salience": {"type": "integer", "description": "重要度 1-5，默认 2", "default": 2, "minimum": 1, "maximum": 5},
                 "category": {"type": "string", "description": "分类，默认 日常", "default": "日常"},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["title"],
         },
@@ -595,7 +600,7 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "event": {"type": "string", "description": "事件描述"},
                 "valence": {"type": "number", "description": "情绪效价 -1.0 ~ 1.0", "minimum": -1, "maximum": 1},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["event", "valence"],
         },
@@ -611,7 +616,7 @@ TOOLS: List[Dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "candidates": {"type": "array", "items": {"type": "string"}, "description": "候选动作列表（可选）"},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
@@ -629,7 +634,7 @@ TOOLS: List[Dict[str, Any]] = [
             "properties": {
                 "kind": {"type": "string", "enum": ["praise", "scold", "poke", "hug", "ignore"]},
                 "action": {"type": "string", "description": "被反馈的动作名，强烈建议传"},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["kind"],
         },
@@ -646,7 +651,7 @@ TOOLS: List[Dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "text": {"type": "string", "description": "用户输入"},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": ["text"],
         },
@@ -662,7 +667,7 @@ TOOLS: List[Dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "persona": {"type": "object", "description": "要合并进去的人格字段（可选）"},
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
@@ -674,7 +679,7 @@ TOOLS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "agent_id": {"type": "string", "default": "default"},
+                "agent_id": {"type": "string", "default": "default", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
@@ -686,7 +691,7 @@ TOOLS: List[Dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "agent_id": {"type": "string", "description": "可选；不传则保存全部"},
+                "agent_id": {"type": "string", "description": "可选；不传则保存全部", "pattern": "^[\\w.\\-]{1,64}$"},
             },
             "required": [],
         },
